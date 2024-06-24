@@ -9,58 +9,67 @@ import time
 from utils.camerainfo import CameraInfo
 import numpy as np
 from utils.consignes import ConsigneDeFrame 
+import os
+
+os.makedirs('data/frames', exist_ok=True)  
+""" 
+# Le servo est sur le PIN 12 (ligne au dessus de la fonction traitementTempsReel())
+# Si possible, agir sur le traitement ligne_par_ligne (False ou True)
+# ou sur la fonction testDeLargeur dans le fichier consignes.py
+
+________________________________________________________________________________________
+"""
+
 
 # INITIALISATION
-c = CameraInfo(hauteur=300, theta=25)
-consigne = ConsigneDeFrame(c, ligne_par_ligne=True)
-VITESSE_POUR_20FRAMES = 1
-VITESSE_M_P_S = 1
+c = CameraInfo(hauteur=300, theta=27)
+consigne = ConsigneDeFrame(c, ligne_par_ligne=True) 
 frames = []
-cte = (VITESSE_M_P_S*0.1/VITESSE_POUR_20FRAMES) #On suppose commander 1fois chaque 0.5s pour 1m/s
+cte = 0.1 #On suppose commander 1fois chaque 0.1s  
 waitingTime = 0.001 #Pour ralentir le traitement dans le cas d'une vidéo
 
 
-# from picamera.array import PiRGBArray
-# from picamera import PiCamera
-# from piservo import Servo
-# myservo = Servo(12)
-# def traitementTempsReel():
-#     # Initialisation de la PiCamera
-#     myservo.write(90)
-#     camera = PiCamera()
-#     camera.resolution = (640, 480)
-#     camera.start_preview()
-#     camera.framerate = 24  # Réglage du taux de rafraîchissement
-#     rawCapture = PiRGBArray(camera, size=(640, 480)) 
-#     # Laisser le temps à la caméra de s'initialiser
-#     time.sleep(0.1)
-#     nbreFrame = 0
+from picamera.array import PiRGBArray
+from picamera import PiCamera
+from piservo import Servo
+myservo = Servo(12)
+def traitementTempsReel():
+    # Initialisation de la PiCamera
+    myservo.write(90)
+    camera = PiCamera()
+    camera.resolution = (640, 480)
+    camera.start_preview()
+    camera.framerate = 24  # Réglage du taux de rafraîchissement
+    rawCapture = PiRGBArray(camera, size=(640, 480)) 
+    # Laisser le temps à la caméra de s'initialiser
+    time.sleep(0.1)
+    nbreFrame = 0
      
     
-#     lastTime = time.time()
+    lastTime = time.time()
     
-#     # Boucle principale
-#     for frame in camera.capture_continuous(rawCapture, format="bgr", use_video_port=True): 
-#         image = frame.array  
+    # Boucle principale
+    for frame in camera.capture_continuous(rawCapture, format="bgr", use_video_port=True): 
+        image = frame.array  
         
-#         fin = time.time() 
-#         if (fin - lastTime) >= cte:
-#             fr = commande(image)
-#             # nbreFrame = nbreFrame + 1
-#             # if len(fr)!=0 and nbreFrame%10==0: 
-#             #     lastTime = time.time()
-#             #     cv2.imwrite(f'{nbreFrame}.jpg', fr)
+        fin = time.time() 
+        if (fin - lastTime) >= cte:
+            fr = commande(image)
+            nbreFrame = nbreFrame + 1
+            if len(fr)!=0 and nbreFrame%10==0: 
+                lastTime = time.time()
+                cv2.imwrite(f'data/frames/{nbreFrame}.jpg', fr)
 
         
-#         # Effacer le flux pour la prochaine image
-#         rawCapture.truncate(0)  
-#         key = cv2.waitKey(1) & 0xFF
-#         if key == ord("q"):
-#             break
-#     camera.stop_preview()
-#     myservo.write(90)
+        # Effacer le flux pour la prochaine image
+        rawCapture.truncate(0)  
+        key = cv2.waitKey(1) & 0xFF
+        if key == ord("q"):
+            break
+    camera.stop_preview()
+    myservo.write(90)
 
-def traitementTempsVideo(): 
+def traitementVideo(): 
     video_path = "vid/cool3.h264"
     video_capture = cv2.VideoCapture(video_path)
     debut = time.time()
@@ -79,13 +88,13 @@ def traitementTempsVideo():
             if len(fr)!=0: 
                 lastTime = time.time() 
                 frames.append(fr)
-                cv2.imwrite(f'{nbreFrame}.jpg', frame)
-                cv2.imwrite(f'{nbreFrame}r.jpg', fr)
+                cv2.imwrite(f'data/frames/{nbreFrame}.jpg', frame)
+                cv2.imwrite(f'data/frames/{nbreFrame}r.jpg', fr)
                 nbreFrame = nbreFrame+1
         time.sleep(waitingTime)
     fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # You can choose other codecs as well
     height, width, _ = frames[0].shape
-    out = cv2.VideoWriter('az.mp4', fourcc, 10.0, (width, height)) 
+    out = cv2.VideoWriter('output.mp4', fourcc, 10.0, (width, height)) 
     for frame in frames: 
         out.write(frame)
     out.release()
@@ -100,17 +109,14 @@ def write_text_on_frame(frame, text, position, font=cv2.FONT_HERSHEY_SIMPLEX, fo
     cv2.putText(frame, text, text_origin, font, font_scale, color, thickness) 
     return frame
 
-def commande(frame, tempsReel=False): 
+def commande(frame): 
     coordinatesOfRedLines = consigne.processLigne(frame, True) 
     if len(coordinatesOfRedLines)>2: 
         try:
             fr, x_projete = consigne.afficherLigneRouge() 
             deltaTheta = consigne.recupererTheta(cte)
             theta = int(90 + deltaTheta)
-            
-            if tempsReel==False:
-                print(f"x={consigne.x_projete}"), print(f"alph={consigne.alpha}"), print(f"delt={deltaTheta}"), print(f"theta {theta}")
-                
+             
             bornSup = 130
             bornInf = 50
             if theta >bornSup: 
@@ -118,7 +124,7 @@ def commande(frame, tempsReel=False):
             if theta < bornInf:
                 theta = bornInf
                 
-            # myservo.write(theta)
+            myservo.write(theta)
             al = round(float(consigne.alpha), 2) 
             dt = round(float(deltaTheta), 2) 
             x_proj_formatted =round(float(x_projete), 3)*100
@@ -130,10 +136,9 @@ def commande(frame, tempsReel=False):
     return []
 
 
-if __name__=="__main__":
-    # traitementTempsReelOrdinateur()
-    traitementTempsVideo() 
-    # traitementTempsReel()
+if __name__=="__main__": 
+    # traitementVideo() 
+    traitementTempsReel()
 
 # Libérer les ressources 
 cv2.destroyAllWindows()

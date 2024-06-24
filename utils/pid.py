@@ -15,10 +15,11 @@ class PIDController:
         self.previousError = 0.0  # Erreur précédente
 
     def update(self, measuredValue, deltaTime):
+        # deltaTime = 1
         
         error = self.valeurDesiree - measuredValue  # Calcul de l'erreur
         self.integral += error * deltaTime  # Calcul du terme intégral
-        derivative = (error - self.previousError) / deltaTime  # Calcul du terme dérivé
+        derivative = (error - self.previousError) / deltaTime  # Calcul du terme dérivé 
         
         
         # Calcul de la sortie du PID
